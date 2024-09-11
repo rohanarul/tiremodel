@@ -1,0 +1,74 @@
+%% Step 1: User Input for All Data
+% Ask the user for the necessary inputs
+avg_speed = input('Enter the average speed of the car (in km/h): ');
+distance_traveled = input('Enter the total distance traveled (in meters): ');
+avg_load = input('Enter the average load on the tire (in Newtons): ');
+tire_temperature = input('Enter the average temperature of the tire (in Celsius): ');
+time_sim = input('')
+
+% Convert speed to meters per second (m/s)
+speed_mps = avg_speed * 1000 / 3600;
+
+% Define time vector (assuming simulation runs in steps of 1 second)
+time = linspace(0, simulation_time, simulation_time);
+
+%% Step 2: Define Tire Model Parameters (Pajceka's Magic Tyre Formula)
+% Magic Formula coefficients [B, C, D, E] for the tire model
+B = 10; % Stiffness factor
+C = 1.9; % Shape factor
+D = 1;   % Peak factor (maximum force)
+E = 0.97; % Curvature factor (influences the peak)
+
+% Load-dependent parameters for Magic Formula (assumed constant)
+p_Cx1 = 1.685; % Load sensitivity for longitudinal forces
+p_Dx1 = 1.21;  % Peak longitudinal force coefficient
+p_Ex1 = 0.344; % Longitudinal force curvature at slip
+
+%% Step 3: Tire Degradation Model
+% Tire degradation depends on several factors including temperature, load, 
+% and distance traveled.This model is a simplified version using a linear relation.
+% Degradation rate increases with all 4 variable.
+
+% Assumptions for the degradation model
+base_wear_rate = 0.0001; % Baseline wear rate, arbitrary units
+temperature_effect = 0.01 * (tire_temperature - 20); % Tire wear increases 1% for each degree over 20°C
+load_effect = 0.008 * avg_load; % Additional wear per unit load
+speed_effect = 0.004 * avg_speed; % Additional wear per unit speed
+
+
+% Calculate the overall degradation rate (higher temp and load increase degradation)
+wear_rate = base_wear_rate + temperature_effect + load_effect + speed_effect;
+
+% Cumulative wear over the traveled distance
+cumulative_wear = wear_rate * distance_traveled;
+
+% Exponential degradation model: Degradation grows faster as the tire degrades
+decay_constant = 0.0005;  % Constant to control how fast degradation accelerates
+cumulative_wear = wear_rate * (exp(decay_constant * distance_traveled) - 1); % Exponential wear over total distance
+
+%% Step 4: Simulate Tire Degradation over Time
+% Exponential wear model over time
+wear_over_time = wear_rate * (exp(decay_constant * time) - 1);  % Exponential degradation curve
+
+% Simulate tire performance degradation (e.g., reduced traction over time)
+traction_loss = D - wear_over_time; % Traction reduces exponentially as tire degrades
+%% Step 5: Plot the Results
+figure;
+subplot(2,1,1);
+plot(time, wear_over_time, 'r-', 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Cumulative Wear');
+title('Tire Wear Over Time');
+grid on;
+
+subplot(2,1,2);
+plot(time, traction_loss, 'b-', 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Traction (normalized)');
+title('Tire Traction Degradation Over Time');
+grid on;
+
+%% Step 6: Display Results
+fprintf('After %.2f meters of travel, the tire has degraded by %.4f units.\n', ...
+    distance_traveled, cumulative_wear);
+fprintf('Final traction level: %.4f (relative to initial)\n', min(traction_loss));
