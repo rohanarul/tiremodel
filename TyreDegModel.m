@@ -1,78 +1,100 @@
 %% Step 1: User Input for All Data
-% Ask the user for the necessary inputs
-avg_speed = input('Enter the average speed of the car (in km/h): ');
-distance_traveled = input('Enter the total distance traveled (in meters): ');
-avg_load = input('Enter the average load on the tire (in Newtons): ');
-tire_temperature = input('Enter the average temperature of the tire (in Celsius): ');
-time_sim = input('Enter the duration of the simulation (in seconds)')
+% Ask user for number of corners and straights
+num_straights = input('Enter the number of straights in the track: ');
+num_corners = input('Enter the number of corners in the track: ');
 
-% Convert speed to meters per second (m/s)
-speed_mps = avg_speed * 1000 / 3600;
+% Initialize arrays for each segment's input
+segment_speeds = zeros(1, num_straights + num_corners);
+segment_distances = zeros(1, num_straights + num_corners);
+segment_loads = zeros(1, num_straights + num_corners);
+segment_temperatures = zeros(1, num_straights + num_corners);
+segment_times = zeros(1, num_straights + num_corners); % For storing time taken for each segment
+segment_traction_loss = zeros(1, num_straights + num_corners); % Store traction loss for each segment
 
-% Define time vector (assuming simulation runs in steps of 1 second)
-time = linspace(0, simulation_time, simulation_time);
+% Collect inputs for each straight
+for i = 1:num_straights
+    fprintf('Straight %d:\n', i);
+    segment_speeds(i) = input('Enter the speed in km/h: ');
+    segment_distances(i) = input('Enter the distance in meters: ');
+    segment_loads(i) = input('Enter the load on the tire (in Newtons): ');
+    segment_temperatures(i) = input('Enter the tire temperature (in Celsius): ');
+end
 
-%% Step 2: Define Tire Model Parameters (Pajceka's Magic Tyre Formula)
-% Magic Formula coefficients [B, C, D, E] for the tire model
-B = 10; % Stiffness factor
-C = 1.9; % Shape factor
-D = 1;   % Peak factor (maximum force)
-E = 0.97; % Curvature factor (influences the peak)
+% Collect inputs for each corner
+for i = 1:num_corners
+    fprintf('Corner %d:\n', i);
+    segment_speeds(num_straights + i) = input('Enter the speed in km/h: ');
+    segment_distances(num_straights + i) = input('Enter the distance in meters: ');
+    segment_loads(num_straights + i) = input('Enter the load on the tire (in Newtons): ');
+    segment_temperatures(num_straights + i) = input('Enter the tire temperature (in Celsius): ');
+end
 
-% Load-dependent parameters for Magic Formula (assumed constant)
-p_Cx1 = 1.685; % Load sensitivity for longitudinal forces
-p_Dx1 = 1.21;  % Peak longitudinal force coefficient
-p_Ex1 = 0.344; % Longitudinal force curvature at slip
+%% Step 2: Tire Degradation Model for Each Segment
+base_wear_rate = 0.0001; % Base wear rate
+decay_constant = 0.0005;  % Constant to control exponential degradation
 
-%% Step 3: Tire Degradation Model
-% Tire degradation depends on several factors including temperature, load, 
-% and distance traveled.This model is a simplified version using a linear relation.
-% Degradation rate increases with all 4 variable.
+total_wear = 0;
+total_distance = 0;
+total_time = 0;
+total_traction_loss = 0;
 
-% Assumptions for the degradation model
-base_wear_rate = 0.0001; % Baseline wear rate, arbitrary units
-temperature_effect = 0.01 * (tire_temperature - 20); % Tire wear increases 1% for each degree over 20°C
-load_effect = 0.008 * avg_load; % Additional wear per unit load
-speed_effect = 0.004 * avg_speed; % Additional wear per unit speed
+cumulative_time = zeros(1, num_straights + num_corners); % Track cumulative time
 
+for i = 1:(num_straights + num_corners)
+    % Convert speed to meters per second
+    speed_mps = segment_speeds(i) * 1000 / 3600;
 
-% Calculate the overall degradation rate (higher temp and load increase degradation)
-wear_rate = base_wear_rate + temperature_effect + load_effect + speed_effect;
+    % Calculate time taken for this segment
+    segment_times(i) = segment_distances(i) / speed_mps;
+    
+    % Cumulative time
+    if i == 1
+        cumulative_time(i) = segment_times(i);
+    else
+        cumulative_time(i) = cumulative_time(i-1) + segment_times(i);
+    end
+    
+    % Degradation effects for each segment
+    temperature_effect = 0.01 * (segment_temperatures(i) - 20); 
+    load_effect = 0.008 * segment_loads(i); 
+    speed_effect = 0.004 * segment_speeds(i); 
+    
+    % Calculate the wear rate for this segment
+    wear_rate = base_wear_rate + temperature_effect + load_effect + speed_effect;
+    
+    % Calculate wear for this segment
+    distance_covered = segment_distances(i);
+    segment_wear = wear_rate * (exp(decay_constant * distance_covered) - 1);
+    
+    % Sum up total wear and total time
+    total_wear = total_wear + segment_wear;
+    total_distance = total_distance + distance_covered;
+    total_time = total_time + segment_times(i); 
+    
+    % Calculate traction loss for each segment
+    segment_traction_loss(i) = 1 - segment_wear; % Assuming initial traction = 1
+    total_traction_loss = total_traction_loss + segment_traction_loss(i);
+end
 
-% Cumulative wear over the traveled distance
-cumulative_wear = wear_rate * distance_traveled;
+% Calculate average traction loss over the circuit
+avg_traction_loss = total_traction_loss / (num_straights + num_corners);
 
-% Exponential degradation model: Degradation grows faster as the tire degrades
-decay_constant = 0.0005;  % Constant to control how fast degradation accelerates
-distance_per_second = speed_mps;  % Distance covered per second
-total_distance = distance_per_second * time_sim;  % Total distance covered in the given time
-
-cumulative_wear = wear_rate * (exp(decay_constant * total_distance) - 1); % Exponential wear over total distance
-
-%% Step 4: Simulate Tire Degradation over Time
-% Exponential wear model over time
-distance_covered = distance_per_second * time;  % Distance covered at each time step
-wear_over_time = wear_rate * (exp(decay_constant * distance_covered) - 1);  % Exponential degradation curve
-
-% Simulate tire performance degradation (e.g., reduced traction over time)
-traction_loss = D - wear_over_time; % Traction reduces exponentially as tire degrades
 %% Step 5: Plot the Results
 figure;
 subplot(2,1,1);
-plot(time, wear_over_time, 'r-', 'LineWidth', 2);
-xlabel('Time (s)');
-ylabel('Cumulative Wear');
-title('Tire Wear Over Time');
-grid on;
-
-subplot(2,1,2);
-plot(time, traction_loss, 'b-', 'LineWidth', 2);
+plot(cumulative_time, segment_traction_loss, 'b-', 'LineWidth', 2);
 xlabel('Time (s)');
 ylabel('Traction (normalized)');
 title('Tire Traction Degradation Over Time');
 grid on;
 
+subplot(2,1,2);
+plot(cumulative_time, cumsum(segment_distances), 'r-', 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Cumulative Distance (m)');
+title('Cumulative Distance Over Time');
+grid on;
+
 %% Step 6: Display Results
-fprintf('After %.2f meters of travel, the tire has degraded by %.4f units.\n', ...
-    distance_traveled, cumulative_wear);
-fprintf('Final traction level: %.4f (relative to initial)\n', min(traction_loss));
+
+fprintf('Average traction loss: %.4f (relative to initial)\n', min(avg_traction_loss));
